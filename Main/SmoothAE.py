@@ -33,7 +33,7 @@ class SmoothAE(object):
         self._eta = 1e-7
         
         # Regularization penalty
-        self._lamb = 1
+        self._lamb = 0
         
         # epoch num
         self._epochNum = 0
@@ -110,14 +110,16 @@ class SmoothAE(object):
             
             # define h matrix layer
             hmIn = np.dot(smOut,self._w_star) + self._b_star
-            hmOut = self._hmatrixLayer.computeOut(hmIn) 
+            hmOut = self._hmatrixLayer.computeOut(hmIn)
+            
+#             penalty = np.sum(np.dot(np.dot([hmOut],Datasets.L),np.transpose([hmOut])))
             
             # define out layer
             ouIn = np.dot(hmOut,self._w) + self._b
             ouOut = self._outputLayer.computeOut(ouIn)              
         
             # error function
-            self._err += ((x - ouOut) ** 2).sum()
+            self._err += ((x - ouOut) ** 2).sum() # + self._lamb * penalty
             # update context layer
             self._contextLayer.computeOut(self._smoothLayer.getOutValues())
             
@@ -158,7 +160,7 @@ class SmoothAE(object):
         self._alpha += alpha_change.eval()
         for layer in self._layers:
             layer.update() 
-            
+        self._err = self._err / self._miniBatchSize
     
     def train(self,inputData):
         epoch_num = 0
@@ -171,9 +173,6 @@ class SmoothAE(object):
             if(self._err < 0.01):
                 break
             print("epoch " + str(epoch_num) + ": err=" + str(self._err))
-            print(self._alpha)
-            print(len(inputData[0]))
-            print(len(self._outputLayer.getAverageOut()))
             
 def test_SmoothAE():
     data = Datasets.samples

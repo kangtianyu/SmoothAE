@@ -6,6 +6,7 @@ Created on Apr 21, 2017
 import os
 import re
 import scipy.sparse as sp
+import numpy as np
 
 # Working directory
 # dir_path = os.path.dirname(os.path.realpath(__file__))
@@ -74,19 +75,25 @@ with open(cwd + "/../data/" + file_rels) as tfile:
 tfile.close()
 
 # Adjacency matrix
-data = [];
-rows = [];
-columns = [];
+data = []
+rows = []
+columns = []
+list = []
 NON_ZEROS = 0
 for i in range(len(labels)):
     if labels[i] in edgeInfo:
+        t = 0
         for j in edgeInfo[labels[i]].keys():
             if j in gid2pos:
                 data.append(1);
                 columns.append(i)
                 rows.append(gid2pos[j])
                 NON_ZEROS += 1
+                t += 1
+        list.append(t)
+D = np.diag(list)
 ADJ_MAT = sp.csr_matrix((data,(rows,columns)), shape=(len(labels), len(labels)))
+L = D - ADJ_MAT
 
 print("Data load complete")
 
