@@ -7,15 +7,19 @@ import os
 import re
 import scipy.sparse as sp
 import numpy as np
+import json
+import os.path
+import time
+
+FORCE_RECOMPUTE = False
 
 # Working directory
 # dir_path = os.path.dirname(os.path.realpath(__file__))
 cwd = os.getcwd()
 
 # File path
-file_ents = "PC_NCI.ents"
-file_rels = "PC_NCI.rels"
-file_data = "UCEC.txt"
+file_network = "PC_NCI"
+file_data = "UCEC"
 
 # gene id to uid (which used in graph)
 gid2uid = {}
@@ -38,7 +42,7 @@ samples = []
 groundTruth = []
  
 # Read data file
-with open(cwd + "/../data/" + file_data) as tfile:    
+with open(cwd + "/../data/" + file_data + ".txt") as tfile:    
     x = re.split("\s+",tfile.readline().strip())
     del x[0]
     labels = x
@@ -47,21 +51,21 @@ with open(cwd + "/../data/" + file_data) as tfile:
     for line in tfile:        
         x = re.split("\s+",line.strip())
         groundTruth.append(float(x.pop(0)))
-        samples.append(map(float,x))
-tfile.close()
+        samples.append(list(map(float,x)))
+
+# samples = [samples[0]]
 
 # Read ents file
-with open(cwd + "/../data/" + file_ents) as tfile:
+with open(cwd + "/../data/" + file_network + ".ents") as tfile:
     tfile.readline()
     for line in tfile:
         x = re.split("\s+",line.strip())
         gid2uid[x[2]] = x[0]
         uid2gid[x[0]] = x[2]
         gname2gid[x[1]] = x[2]
-tfile.close()
 
 # Read rels file
-with open(cwd + "/../data/" + file_rels) as tfile:
+with open(cwd + "/../data/" + file_network + ".rels") as tfile:
     tfile.readline()
     for line in tfile:
         x = re.split("\s+",line.strip())
@@ -72,29 +76,67 @@ with open(cwd + "/../data/" + file_rels) as tfile:
                 edgeInfo[uid2gid[x[2]]] = {}
             edgeInfo[uid2gid[x[1]]][uid2gid[x[2]]] = x[3]
             edgeInfo[uid2gid[x[2]]][uid2gid[x[1]]] = x[3]
-tfile.close()
 
 # Adjacency matrix
 data = []
 rows = []
 columns = []
-list = []
 NON_ZEROS = 0
 for i in range(len(labels)):
     if labels[i] in edgeInfo:
-        t = 0
         for j in edgeInfo[labels[i]].keys():
             if j in gid2pos:
                 data.append(1);
                 columns.append(i)
                 rows.append(gid2pos[j])
                 NON_ZEROS += 1
-                t += 1
-        list.append(t)
-D = np.diag(list)
 ADJ_MAT = sp.csr_matrix((data,(rows,columns)), shape=(len(labels), len(labels)))
-L = D - ADJ_MAT
+
+# Sample adjacency matrix
+# p nearest neighbor
+afpath = cwd + "/../data/" + file_data + "_adj_matrix.txt"
+if FORCE_RECOMPUTE or (not os.path.isfile(afpath)):
+    p = 5
+    sorts = []
+    for i in range(len(samples)):
+        l = []
+        for j in range(len(samples)):
+            if not i==j:
+                l.append((np.sum(np.power(np.subtract(samples[i],samples[j]),2)),j))
+        l.sort(key=lambda x:x[0])
+        sorts.append(list(map(lambda x:x[1],l[0:p])))
+    with open(afpath,"w") as tfile:
+        json.dump(sorts, tfile)
+else:
+    with open(afpath) as tfile:
+        sorts = json.load(tfile)
+
+# build matrix    
+deg = []
+A = []
+for i in range(len(samples)):
+    l = []
+    degree = 0
+    for j in range(len(samples)):
+        if (i in sorts[j]) or (j in sorts[i]):
+            l.append(1)
+            degree += 1
+        else:
+            l.append(0)
+    A.append(l)
+    deg.append(degree)
+D = np.diag(deg)
+L = D-A
+
+logStart = time.strftime("%Y_%d_%m_%H_%M_%S")
+with open(cwd + "/../log/" + logStart + ".txt","w") as tfile:
+    tfile.write(time.strftime("%c") + '\n')
+def log(str):
+    with open(cwd + "/../log/" + logStart + ".txt","a") as tfile:
+        tfile.write(str + '\n')
+# f = cwd + "/../data/" + file_data
+# np.savetxt(f + "_adj_matrixD.txt", D ,fmt='%0.0f')
+# np.savetxt(f + "_adj_matrixA.txt", A ,fmt='%0.0f')
+# np.savetxt(f + "_adj_matrixL.txt", L ,fmt='%0.0f')
 
 print("Data load complete")
-
-# samples = [samples[0]]
