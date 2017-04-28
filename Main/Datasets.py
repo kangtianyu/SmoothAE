@@ -11,7 +11,8 @@ import json
 import os.path
 import time
 
-FORCE_RECOMPUTE = False
+# FORCE_RECOMPUTE = False
+FORCE_RECOMPUTE = True
 
 # Working directory
 # dir_path = os.path.dirname(os.path.realpath(__file__))
@@ -53,7 +54,7 @@ with open(cwd + "/../data/" + file_data + ".txt") as tfile:
         groundTruth.append(float(x.pop(0)))
         samples.append(list(map(float,x)))
 
-# samples = [samples[0]]
+samples = samples[0:20]
 
 # Read ents file
 with open(cwd + "/../data/" + file_network + ".ents") as tfile:
@@ -128,12 +129,30 @@ for i in range(len(samples)):
 D = np.diag(deg)
 L = D-A
 
-logStart = time.strftime("%Y_%d_%m_%H_%M_%S")
-with open(cwd + "/../log/" + logStart + ".txt","w") as tfile:
+logStart = time.strftime("%Y_%m_%d_%H_%M_%S")
+logpath = cwd + "/../log/" + logStart + "/"
+if not os.path.exists(logpath):
+    os.makedirs(logpath)
+    
+with open(logpath + time.strftime("%Y_%m_%d_%H_%M_%S") + ".txt","w") as tfile:
     tfile.write(time.strftime("%c") + '\n')
+    
 def log(str):
-    with open(cwd + "/../log/" + logStart + ".txt","a") as tfile:
+    with open(logpath + logStart + ".txt","a") as tfile:
         tfile.write(str + '\n')
+        
+def dmp(str,info):
+    with open(logpath + str + ".txt","w") as tfile:
+        tfile.write(time.strftime("%c") + '\n')
+        tfile.write(info + '\n')
+
+def dmpnp(str,info):
+    np.savetxt(logpath + str + ".txt", info ,fmt='%0.6f')
+
+def dmpj(str,jv): 
+    with open(logpath + str + ".txt","w") as tfile:
+        json.dump(jv, tfile)
+        
 # f = cwd + "/../data/" + file_data
 # np.savetxt(f + "_adj_matrixD.txt", D ,fmt='%0.0f')
 # np.savetxt(f + "_adj_matrixA.txt", A ,fmt='%0.0f')
