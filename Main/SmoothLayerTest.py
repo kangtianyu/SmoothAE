@@ -40,7 +40,7 @@ class SmoothLayer(object):
         # input layer to smooth Layer
         # 1-self._alpha
 #         self._alpha = theano.shared(0.5)
-        self._alpha = 0.1
+        self._alpha = 0.6
         
         # smooth layer to context layer
         # 1
@@ -66,7 +66,7 @@ class SmoothLayer(object):
             # define smooth layer
             # smooth function is f_(t+1) = alpha * ADJ_MAT * f_t + (1-alpha) * f_0
             
-            smIn =  self._alpha * S.dot(T.as_tensor_variable(self._contextLayer.getAverageOut()),Datasets.ADJ_MAT) + np.multiply(x,1-self._alpha)
+            smIn =  self._alpha * S.dot(T.as_tensor_variable(self._contextLayer.getAverageOut()),Datasets.W) + np.multiply(x,1-self._alpha)
             smOut = self._smoothLayer.computeOut(smIn.eval())
 #             Datasets.dmpnp("s_out_" + str(self._epochNum) + "_" + str(count), self._smoothLayer.getOutValues())
 
@@ -83,7 +83,7 @@ class SmoothLayer(object):
         while True:
             t0 = time.time()
             self._epochNum += 1
-            Datasets.dmpnp("s_out_" + str(self._epochNum), self._contextLayer.getAverageOut())
+            Datasets.dmpnp("c_out_" + str(self._epochNum), self._contextLayer.getAverageOut())
             self.learn(inputData)
             Datasets.dmpnp("s_out_" + str(self._epochNum), self._smoothLayer.getAverageOut())
             Datasets.log("epoch " + str(self._epochNum) + "(" + str(time.time()-t0) + "s)")

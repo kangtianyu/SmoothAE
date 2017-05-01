@@ -6,13 +6,15 @@ Created on Apr 21, 2017
 import os
 import re
 import scipy.sparse as sp
+import theano.sparse.basic as S
 import numpy as np
 import json
 import os.path
 import time
+from six.moves import cPickle
 
-# FORCE_RECOMPUTE = False
-FORCE_RECOMPUTE = True
+FORCE_RECOMPUTE = False
+# FORCE_RECOMPUTE = True
 
 # Working directory
 # dir_path = os.path.dirname(os.path.realpath(__file__))
@@ -79,19 +81,35 @@ with open(cwd + "/../data/" + file_network + ".rels") as tfile:
             edgeInfo[uid2gid[x[2]]][uid2gid[x[1]]] = x[3]
 
 # Adjacency matrix
-data = []
-rows = []
-columns = []
-NON_ZEROS = 0
-for i in range(len(labels)):
-    if labels[i] in edgeInfo:
-        for j in edgeInfo[labels[i]].keys():
-            if j in gid2pos:
-                data.append(1);
-                columns.append(i)
-                rows.append(gid2pos[j])
-                NON_ZEROS += 1
-ADJ_MAT = sp.csr_matrix((data,(rows,columns)), shape=(len(labels), len(labels)))
+afpath = cwd + "/../data/" + file_network + "_adj_matrix.txt"
+if FORCE_RECOMPUTE or (not os.path.isfile(afpath)):
+    data = []
+    rows = []
+    columns = []
+    NON_ZEROS = 0
+    for i in range(len(labels)):
+        if labels[i] in edgeInfo:
+            for j in edgeInfo[labels[i]].keys():
+                if j in gid2pos:
+                    data.append(1);
+                    columns.append(i)
+                    rows.append(gid2pos[j])
+                    NON_ZEROS += 1
+    __ADJ_MAT = sp.csr_matrix((data,(rows,columns)), shape=(len(labels), len(labels)))
+    # D_star = D^(-1/2) where D is a diagonal matrix with diagonal entries equals the row sum of ADJ_MAT
+    ADJ_DIAG = np.sqrt(S.sp_sum(__ADJ_MAT,0)).eval()
+    ADJ_DIAG_INV = np.float64(1.0)/ADJ_DIAG
+    D_star = sp.csr_matrix((ADJ_DIAG_INV,(range(len(labels)),range(len(labels)))), shape=(len(labels), len(labels)))
+    
+    W = S.dot(S.dot(D_star,__ADJ_MAT),D_star).eval()
+    W = sp.csr_matrix(np.where(np.isnan(W), 0, W))
+    with open(afpath,"wb") as tfile:
+        for obj in [W,NON_ZEROS]:
+            cPickle.dump(obj, tfile, protocol=cPickle.HIGHEST_PROTOCOL)
+else:
+    with open(afpath,"rb") as tfile:
+        W = cPickle.load(tfile)
+        NON_ZEROS = cPickle.load(tfile)
 
 # Sample adjacency matrix
 # p nearest neighbor

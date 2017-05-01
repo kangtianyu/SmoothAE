@@ -66,6 +66,9 @@ class Layer(object):
             self._out = np.zeros(self._nodeNum)
         return self._out
     
+    def setAverageOut(self,values):
+        self._p_avg_out = values
+    
     def getAverageOut(self):
         return self._p_avg_out
     

@@ -31,10 +31,10 @@ class SmoothAE(object):
         self._k = 3
         
         # Learning rate
-        self._eta = 1e-7
+        self._eta = 1e-1
         
         # Regularization penalty
-        self._lamb = 1e-2
+        self._lamb = 1e0
         
         # epoch num
         self._epochNum = 0
@@ -55,6 +55,7 @@ class SmoothAE(object):
         # Layers
         self._smoothLayer = Layer.Layer(nodeNum = self._inputNum)
         self._contextLayer = Layer.Layer(nodeNum = self._inputNum)
+        self._contextLayer.setAverageOut(rng.rand(self._inputNum))
         self._hmatrixLayer = Layer.Layer(nodeNum = self._k, activation = nn.relu, grad = d_relu)
         self._outputLayer = Layer.Layer(nodeNum = self._inputNum, activation = sig, grad = d_sig)
         
@@ -70,11 +71,11 @@ class SmoothAE(object):
         # 1
         
         # context layer to smooth layer
-        # ADJ_MAT * self._alpha
+        # W * self._alpha
         
         # smooth layer to h matrix layer
         # _w_star, _b_star
-        _values = np.asarray(rng.uniform(low=-0.5,high=0.5,size=(self._inputNum, self._k)))
+        _values = np.asarray(rng.uniform(low=0.0,high=1.0,size=(self._inputNum, self._k)))
 #         self._w_star = theano.shared(value=_values, name='W_star', borrow=True)
 #         self._b_star = theano.shared(np.zeros(self._k))
         self._w_star = _values
@@ -82,7 +83,7 @@ class SmoothAE(object):
         
         # h matrix layer to output layer
         # _w, _b  
-        _values = np.asarray(rng.uniform(low=-0.5,high=0.5,size=(self._k, self._inputNum)))
+        _values = np.asarray(rng.uniform(low=0.0,high=1.0,size=(self._k, self._inputNum)))
 #         self._w = theano.shared(value=_values, name='W', borrow=True)
 #         self._b = theano.shared(np.zeros(self._inputNum))
         self._w = _values
@@ -102,6 +103,8 @@ class SmoothAE(object):
         alpha_change = 0
         
         self._H=[]
+        self._H_in=[]
+        self._d_alpha=[]
         count = 0
         
         for sample in inputData:
@@ -113,8 +116,8 @@ class SmoothAE(object):
             # define input layer        
             x = sample
             # define smooth layer
-            # smooth function is f_(t+1) = alpha * ADJ_MAT * f_t + (1-alpha) * f_0
-            smIn =  self._alpha * S.dot(T.as_tensor_variable(self._contextLayer.getAverageOut()),Datasets.ADJ_MAT) + np.multiply(x,1-self._alpha)
+            # smooth function is f_(t+1) = alpha * W * f_t + (1-alpha) * f_0
+            smIn =  self._alpha * S.dot(T.as_tensor_variable(self._contextLayer.getAverageOut()),Datasets.W) + np.multiply(x,1-self._alpha)
             smOut = self._smoothLayer.computeOut(smIn.eval())
             
             # define context layer
@@ -125,6 +128,7 @@ class SmoothAE(object):
             hmIn = np.dot(smOut,self._w_star) + self._b_star
             hmOut = self._hmatrixLayer.computeOut(hmIn)
             
+            self._H_in.append(hmIn)
             self._H.append(hmOut)
             
             # define out layer
@@ -154,7 +158,7 @@ class SmoothAE(object):
             # error for context layer
             self._contextLayer.setErrors(
                 self._alpha
-                * S.dot(T.as_tensor_variable(self._smoothLayer.getErrors()),Datasets.ADJ_MAT).eval()
+                * S.dot(T.as_tensor_variable(self._smoothLayer.getErrors()),Datasets.W).eval()
                 * self._contextLayer.getGrad()(self._contextLayer.getOutValues()))
             
             """ update weights"""
@@ -162,15 +166,24 @@ class SmoothAE(object):
             b_change += self._outputLayer.getErrors()
             w_star_change += np.dot(np.transpose([self._smoothLayer.getOutValues()]), [self._hmatrixLayer.getErrors()])
             b_star_change += self._hmatrixLayer.getErrors()
-            alpha_change_c = S.sp_sum(S.mul(Datasets.ADJ_MAT,S.dot(S.transpose(sp.csr_matrix(np.asarray([self._contextLayer.getAverageOut()]))), sp.csr_matrix(np.asarray([self._smoothLayer.getErrors()])))))/Datasets.NON_ZEROS
+            alpha_change_c = S.sp_sum(S.mul(Datasets.W,S.dot(S.transpose(sp.csr_matrix(np.asarray([self._contextLayer.getAverageOut()]))), sp.csr_matrix(np.asarray([self._smoothLayer.getErrors()])))))/Datasets.NON_ZEROS
             alpha_change_i = np.sum(self._smoothLayer.getErrors())/self._inputNum
             alpha_change = (alpha_change + alpha_change_c - alpha_change_i).eval()
+            
+            self._d_alpha.append(alpha_change)
             
             Datasets.log(str(count) + "/" + str(len(inputData)) + "err:" + str(terr) + "(" + str(time.time()-t0) + "s)")
         
         """ update network"""
         
         t0 = time.time()
+        
+        w_change /= self._miniBatchSize
+        b_change /= self._miniBatchSize
+        w_star_change /= self._miniBatchSize
+        b_star_change /= self._miniBatchSize
+        alpha_change /= self._miniBatchSize
+        
         # penalty extra err   
         penalty = self._lamb * np.sum(np.trace(np.dot(np.dot(np.transpose(self._H),Datasets.L),self._H)))
         h_penalty_err = 2 * self._lamb * np.sum(np.dot(Datasets.L,self._H),0)
@@ -178,15 +191,17 @@ class SmoothAE(object):
         
         w_star_change += np.dot(np.transpose([self._smoothLayer.getAverageOut()]), [h_penalty_err])
         b_star_change += h_penalty_err
-        alpha_change_c = S.sp_sum(S.mul(S.dot(S.transpose(sp.csr_matrix(np.asarray([self._contextLayer.getAverageOut()]))), sp.csr_matrix(np.asarray([s_penalty_err]))),Datasets.ADJ_MAT))/Datasets.NON_ZEROS
+        alpha_change_c = S.sp_sum(S.mul(S.dot(S.transpose(sp.csr_matrix(np.asarray([self._contextLayer.getAverageOut()]))), sp.csr_matrix(np.asarray([s_penalty_err]))),Datasets.W))/Datasets.NON_ZEROS
         alpha_change_i = np.sum(s_penalty_err)/self._inputNum
         alpha_change = (alpha_change + alpha_change_c - alpha_change_i).eval()
         # update weight
-        self._w += self._eta * w_change
+        self._w += self._eta * w_change 
         self._b += self._eta * b_change
         self._w_star += self._eta * w_star_change
         self._b_star += self._eta * b_star_change
         self._alpha += self._eta * alpha_change
+        if self._alpha > 1: self._alpha = 1
+        if self._alpha < 0: self._alpha = 0
         
         Datasets.log("err=" + str(self._err / self._miniBatchSize) + " penalty=" + str(penalty / self._miniBatchSize))
         self._err = (self._err + penalty) / self._miniBatchSize  
@@ -201,18 +216,22 @@ class SmoothAE(object):
             self.learn(inputData)
             Datasets.log("epoch " + str(epoch_num) + ": tot_err =" + str(self._err) + " alpha = " + str(self._alpha) + "(" + str(time.time()-t0) + "s)")
             # Stopping rules
-            if(epoch_num > 100):
+            if(epoch_num > 500):
                 self.save()
                 break
             if(self._err < 0.01):
                 self.save()
                 break
-            self.save("_" + str(epoch_num))
+            if epoch_num % 1 == 0:
+                self.save("_" + str(epoch_num))
             
     def save(self,str=""):
         Datasets.dmpnp("H" + str, self._H)
+        Datasets.dmpnp("H_in" + str, self._H_in)
         Datasets.dmpnp("W" + str, self._w)
+        Datasets.dmpnp("W_star" + str, self._w_star)
         Datasets.dmpnp("B" + str, self._b)
+        Datasets.dmpnp("d_alpha" + str, self._d_alpha)
         Datasets.dmpnp("s_err" + str, self._smoothLayer.getAverageError())
         Datasets.dmpnp("c_err" + str, self._contextLayer.getAverageError())
         Datasets.dmpnp("h_err" + str, self._hmatrixLayer.getAverageError())
