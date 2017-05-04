@@ -176,4 +176,4 @@ def dmpj(str,jv):
 # np.savetxt(f + "_adj_matrixA.txt", A ,fmt='%0.0f')
 # np.savetxt(f + "_adj_matrixL.txt", L ,fmt='%0.0f')
 
-print("Data load complete")
+print("Data load complete",NON_ZEROS)

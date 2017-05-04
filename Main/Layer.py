@@ -49,9 +49,9 @@ class Layer(object):
         
     def computeOut(self,inputValues):
         if not inputValues.shape[0] == self._nodeNum:
-            raise ValueError("Input number error: get " + str(inputValues.shape[0]) + ", expect " + str(self._nodeNum))
+            raise ValueError("Input number error: get " + str(inputValues.shape[0]) + ", expect " + str(self._nodeNum) + " input= " + str(inputValues))
         if self._activation is None:
-            self._out = inputValues
+            self._out = np.copy(inputValues)
         else:
             self._out = self._activation(inputValues)
         self._avg_out += self._out
