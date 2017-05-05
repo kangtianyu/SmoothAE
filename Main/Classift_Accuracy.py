@@ -8,14 +8,24 @@ import os
 import re
 import sys
 
-arg = sys.argv[1]
+
+if len(sys.argv) > 1:
+    arg = sys.argv[1]
+    arg2 = ""
+    if len(sys.argv) > 2:
+        arg2 = sys.argv[2]
+else:
+    print("no parameter")
+    exit()
+
 cwd = os.getcwd()
 file_data = "UCEC"
-if arg == "":
-    folder_test = "2017_05_03_15_43_17"
-else:
-    folder_test = arg
-    
+
+folder_test = arg
+num = -1
+if not arg2 == "":
+    num = int(arg2)
+
 groundTruth = []
 with open(cwd + "/../data/" + file_data + ".txt") as tfile:    
     x = re.split("\s+",tfile.readline().strip())
@@ -42,5 +52,13 @@ while os.path.isfile(filepath):
                tr +=1
             tot += 1
     print(str(i) + ":" + str(tr) + "/" + str(tot) + ":" + str(float(tr)/tot))
+    if num == i:        
+        for k in range(len(idx)):    
+            print(groundTruth[k],idx[k])
+        break
     i += 1
     filepath = cwd + "/../log/" + folder_test + "/H_" + str(i) + ".txt"
+
+if num<0:
+    for k in range(len(idx)):    
+        print(groundTruth[k],idx[k])

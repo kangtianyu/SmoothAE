@@ -14,11 +14,7 @@ import time
 from six.moves import cPickle
 
 FORCE_RECOMPUTE = False
-if __name__ == '__main__':
-    FORCE_RECOMPUTE = True
-if FORCE_RECOMPUTE:
-    print("FORCE RECOMPUTE")
-# FORCE_RECOMPUTE = False
+# FORCE_RECOMPUTE = True
 
 # Working directory
 # dir_path = os.path.dirname(os.path.realpath(__file__))
@@ -99,26 +95,57 @@ if FORCE_RECOMPUTE or (not os.path.isfile(afpath)):
                     columns.append(i)
                     rows.append(gid2pos[j])
                     NON_ZEROS += 1
-    
     __ADJ_MAT = sp.csr_matrix((data,(rows,columns)), shape=(len(labels), len(labels)))
-    ADJ_DIAG_SUM = S.sp_sum(__ADJ_MAT,1).eval()
-    D = np.diag(ADJ_DIAG_SUM)
-    L = sp.csr_matrix(S.sub(D, __ADJ_MAT))
     # D_star = D^(-1/2) where D is a diagonal matrix with diagonal entries equals the row sum of ADJ_MAT
-    ADJ_DIAG_SQRT = np.sqrt(ADJ_DIAG_SUM)
-    ADJ_DIAG_INV = np.float64(1.0)/ADJ_DIAG_SQRT
+    ADJ_DIAG = np.sqrt(S.sp_sum(__ADJ_MAT,0)).eval()
+    ADJ_DIAG_INV = np.float64(1.0)/ADJ_DIAG
     D_star = sp.csr_matrix((ADJ_DIAG_INV,(range(len(labels)),range(len(labels)))), shape=(len(labels), len(labels)))
     
     W = S.dot(S.dot(D_star,__ADJ_MAT),D_star).eval()
     W = sp.csr_matrix(np.where(np.isnan(W), 0, W))
     with open(afpath,"wb") as tfile:
-        for obj in [W,L,NON_ZEROS]:
+        for obj in [W,NON_ZEROS]:
             cPickle.dump(obj, tfile, protocol=cPickle.HIGHEST_PROTOCOL)
 else:
     with open(afpath,"rb") as tfile:
         W = cPickle.load(tfile)
-        L = cPickle.load(tfile)
         NON_ZEROS = cPickle.load(tfile)
+
+# Sample adjacency matrix
+# p nearest neighbor
+afpath = cwd + "/../data/" + file_data + "_adj_matrix.txt"
+if FORCE_RECOMPUTE or (not os.path.isfile(afpath)):
+    p = 5
+    sorts = []
+    for i in range(len(samples)):
+        l = []
+        for j in range(len(samples)):
+            if not i==j:
+                l.append((np.sum(np.power(np.subtract(samples[i],samples[j]),2)),j))
+        l.sort(key=lambda x:x[0])
+        sorts.append(list(map(lambda x:x[1],l[0:p])))
+    with open(afpath,"w") as tfile:
+        json.dump(sorts, tfile)
+else:
+    with open(afpath) as tfile:
+        sorts = json.load(tfile)
+
+# build matrix    
+deg = []
+A = []
+for i in range(len(samples)):
+    l = []
+    degree = 0
+    for j in range(len(samples)):
+        if (i in sorts[j]) or (j in sorts[i]):
+            l.append(1)
+            degree += 1
+        else:
+            l.append(0)
+    A.append(l)
+    deg.append(degree)
+D = np.diag(deg)
+L = D-A
 
 logStart = time.strftime("%Y_%m_%d_%H_%M_%S")
 logpath = cwd + "/../log/" + logStart + "/"
@@ -149,6 +176,6 @@ def dmpj(str,jv):
 # np.savetxt(f + "_adj_matrixA.txt", A ,fmt='%0.0f')
 # np.savetxt(f + "_adj_matrixL.txt", L ,fmt='%0.0f')
 
-# dmpnp("L",L)
+dmpnp("L",L)
 
 print("Data load complete",NON_ZEROS)

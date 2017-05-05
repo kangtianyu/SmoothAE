@@ -15,6 +15,20 @@ import theano.sparse
 import scipy.sparse as sp
 import Datasets
 
+def quickMul(a,b):
+    list = np.transpose(np.nonzero(a))
+    rows = []
+    columns = []
+    data = []
+    size =  theano.sparse.basic.csm_shape(a)[0].eval()
+    for i in list:
+        row = i[0]
+        column = i[1]
+        rows.append(row)
+        columns.append(column)
+        data.append(a[row,column]*b[row,column])
+    return sp.csr_matrix((data,(rows,columns)), shape=(size, size))
+
 class SmoothAE(object):
     
     def __init__(self, inputSize, learningRule = None, costFunction = None):
@@ -33,9 +47,10 @@ class SmoothAE(object):
         
         # Learning rate
         self._eta = 2e-5
+        self._eta_increase_ratio = 1.1
         
         # Regularization penalty
-        self._lamb = 1e0
+        self._lamb = 1e1
         
         # epoch num
         self._epochNum = 0
@@ -124,7 +139,9 @@ class SmoothAE(object):
         x = sample
         # define smooth layer
         # smooth function is f_(t+1) = alpha * W * f_t + (1-alpha) * f_0
-        smIn =  self._alpha * S.structured_dot(T.as_tensor_variable([self._contextLayer.getAverageOut()]),Datasets.W).eval()[0] + np.multiply(x,1-self._alpha)
+        atmp = S.structured_dot(T.as_tensor_variable([self._contextLayer.getAverageOut()]),Datasets.W).eval()[0]
+        self.timeStamp("sm layer 1")
+        smIn =  self._alpha * atmp + np.multiply(x,1-self._alpha)
         smOut = self._smoothLayer.computeOut(smIn)
         
         self.timeStamp("sm layer")
@@ -195,11 +212,10 @@ class SmoothAE(object):
         w_star_change += np.dot(np.transpose([self._smoothLayer.getOutValues()]), [self._hmatrixLayer.getErrors()])
         self.timeStamp("up w*")
 #             b_star_change += self._hmatrixLayer.getErrors()
-        mtmp = S.structured_dot(S.transpose(sp.csr_matrix(np.asarray([self._contextLayer.getAverageOut()]))), sp.csr_matrix(np.asarray([self._smoothLayer.getErrors()])))
-        print(mtmp)
-        alpha_change_c = S.sp_sum(S.mul(Datasets.W,mtmp))/Datasets.NON_ZEROS
+        mtmp = S.structured_dot(S.transpose(sp.csr_matrix(np.asarray([self._contextLayer.getAverageOut()]))), sp.csr_matrix(np.asarray([self._smoothLayer.getErrors()]))).eval()
+        alpha_change_c = S.sp_sum(quickMul(Datasets.W,mtmp)).eval()/Datasets.NON_ZEROS
         alpha_change_i = np.sum(self._smoothLayer.getErrors())/self._inputNum
-        alpha_change = (alpha_change + alpha_change_c - alpha_change_i).eval()        
+        alpha_change = (alpha_change + alpha_change_c - alpha_change_i)       
         self.timeStamp("up alpha")
 #             atmp = S.sp_sum(S.mul(Datasets.W,S.dot(S.transpose(sp.csr_matrix(np.asarray([self._contextLayer.getAverageOut()]))), sp.csr_matrix(np.asarray([self._smoothLayer.getErrors()]))))).eval()
 #             alpha_change_c = atmp/Datasets.NON_ZEROS
@@ -231,10 +247,10 @@ class SmoothAE(object):
         w_star_change += np.dot(np.transpose([self._smoothLayer.getAverageOut()]), [h_penalty_err])        
         self.timeStamp("p on w*")
 #         b_star_change += h_penalty_err
-        alpha_change_c = S.sp_sum(S.mul(Datasets.W,S.structured_dot(S.transpose(sp.csr_matrix(np.asarray([self._contextLayer.getAverageOut()]))), sp.csr_matrix(np.asarray([s_penalty_err])))))/Datasets.NON_ZEROS
+        alpha_change_c = S.sp_sum(quickMul(Datasets.W,S.structured_dot(S.transpose(sp.csr_matrix(np.asarray([self._contextLayer.getAverageOut()]))), sp.csr_matrix(np.asarray([s_penalty_err]))).eval())).eval()/Datasets.NON_ZEROS
         self.timeStamp("alpha c")
         alpha_change_i = np.sum(s_penalty_err)/self._inputNum
-        alpha_change = (alpha_change + alpha_change_c - alpha_change_i).eval()
+        alpha_change = (alpha_change + alpha_change_c - alpha_change_i)
         self.timeStamp("p on alpha")
         # update weight
         self._w += self._eta * w_change         
