@@ -111,14 +111,15 @@ if FORCE_RECOMPUTE or (not os.path.isfile(afpath)):
     
     W = S.dot(S.dot(D_star,__ADJ_MAT),D_star).eval()
     W = sp.csr_matrix(np.where(np.isnan(W), 0, W))
+    W_SUM = S.sp_sum(W).eval()
     with open(afpath,"wb") as tfile:
-        for obj in [W,L,NON_ZEROS]:
+        for obj in [W,L,W_SUM]:
             cPickle.dump(obj, tfile, protocol=cPickle.HIGHEST_PROTOCOL)
 else:
     with open(afpath,"rb") as tfile:
         W = cPickle.load(tfile)
         L = cPickle.load(tfile)
-        NON_ZEROS = cPickle.load(tfile)
+        W_SUM = cPickle.load(tfile)
 
 logStart = time.strftime("%Y_%m_%d_%H_%M_%S")
 logpath = cwd + "/../log/" + logStart + "/"
@@ -151,4 +152,4 @@ def dmpj(str,jv):
 
 # dmpnp("L",L)
 
-print("Data load complete",NON_ZEROS)
+print("Data load complete")

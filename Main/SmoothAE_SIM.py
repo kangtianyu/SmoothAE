@@ -14,21 +14,21 @@ import theano.tensor.nlinalg as nlg
 import theano.sparse.basic as S
 import theano.sparse
 import scipy.sparse as sp
-import Datasets
+import sim_data as Datasets
 
-def quickMul(a,b):
-    li = np.transpose(np.nonzero(a))
-    rows = []
-    columns = []
-    data = []
-    size =  theano.sparse.basic.csm_shape(a)[0].eval()
-    for i in li:
-        row = i[0]
-        column = i[1]
-        rows.append(row)
-        columns.append(column)
-        data.append(a[row,column]*b[row,column])
-    return sp.csr_matrix((data,(rows,columns)), shape=(size, size))
+# def quickMul(a,b):
+#     li = np.transpose(np.nonzero(a))
+#     rows = []
+#     columns = []
+#     data = []
+#     size =  theano.sparse.basic.csm_shape(a)[0].eval()
+#     for i in li:
+#         row = i[0]
+#         column = i[1]
+#         rows.append(row)
+#         columns.append(column)
+#         data.append(a[row,column]*b[row,column])
+#     return sp.csr_matrix((data,(rows,columns)), shape=(size, size))
 
 class SmoothAE(object):
     
@@ -46,9 +46,9 @@ class SmoothAE(object):
         self._k = 3
         
         # Learning rate
-        self._eta = 5e-1
+        self._eta = 0.5e0
         self._eta_increase_ratio = 1.2
-        self._eta_max = 1e-1
+        self._eta_max = 1e-3
         
         # Regularization penalty
         self._lamb = 1e-1
@@ -72,7 +72,7 @@ class SmoothAE(object):
         # Layers
         self._smoothLayer = Layer.Layer(nodeNum = self._inputNum)
         self._contextLayer = Layer.Layer(nodeNum = self._inputNum)
-        self._contextLayer.setAverageOut(S.structured_dot(T.as_tensor_variable([rng.rand(self._inputNum)]),Datasets.W).eval()[0])
+#         self._contextLayer.setAverageOut(np.dot(T.as_tensor_variable([rng.rand(self._inputNum)]),Datasets.W).eval()[0])
         self._wmatrixLayer = Layer.Layer(nodeNum = self._k, activation = nn.relu, grad = d_relu)
 #         self._outputLayer = Layer.Layer(nodeNum = self._inputNum, activation = sig, grad = d_sig)
         self._outputLayer = Layer.Layer(nodeNum = self._inputNum)
@@ -138,7 +138,7 @@ class SmoothAE(object):
             x = sample
             # define smooth layer
             # smooth function is f_(t+1) = alpha * W * f_t + (1-alpha) * f_0
-            smIn =  self._alpha * T.transpose(S.structured_dot(Datasets.W,T.transpose(T.as_tensor_variable([self._contextLayer.getAverageOut()])))).eval()[0] + np.multiply(x,1-self._alpha)
+            smIn =  self._alpha * np.transpose(np.dot(Datasets.W,np.transpose([self._contextLayer.getAverageOut()])))[0] + np.multiply(x,1-self._alpha)
             smOut = self._smoothLayer.computeOut(smIn)
 #             print(time.time()-t0)
             # define context layer
@@ -185,7 +185,7 @@ class SmoothAE(object):
 #             print(time.time()-t0)
             self._contextLayer.setErrors(
                 self._alpha
-                * S.structured_dot(T.as_tensor_variable([self._smoothLayer.getErrors()]),Datasets.W).eval()[0]
+                * np.dot([self._smoothLayer.getErrors()],Datasets.W)[0]
                 * self._contextLayer.getGrad()(self._contextLayer.getOutValues()))
 #             print(time.time()-t0)
             
@@ -195,7 +195,7 @@ class SmoothAE(object):
             h_star_change += np.dot(np.transpose([self._smoothLayer.getOutValues()]), [self._wmatrixLayer.getErrors()])
 #             b_star_change += self._wmatrixLayer.getErrors()
 #             print(time.time()-t0)
-            alpha_change_c = S.sp_sum(quickMul(Datasets.W,S.structured_dot(S.transpose(sp.csr_matrix(np.asarray([self._contextLayer.getAverageOut()]))), sp.csr_matrix(np.asarray([self._smoothLayer.getErrors()]))).eval())).eval()/Datasets.W_SUM         
+            alpha_change_c = np.sum(np.multiply(Datasets.W,np.dot(np.transpose([self._contextLayer.getAverageOut()]), [self._smoothLayer.getErrors()])))/Datasets.W_SUM         
             alpha_change_i = np.sum(np.multiply(x,self._smoothLayer.getErrors()))/self._inputNum
             alpha_change += alpha_change_c - alpha_change_i
 #             print(time.time()-t0)
@@ -243,7 +243,7 @@ class SmoothAE(object):
 #         self._alpha += self._eta * alpha_change
         self._alpha += 0.1 * alpha_change
 
-        if self._alpha > 0.899: self._alpha = 0.899
+        if self._alpha > 0.89: self._alpha = 0.89
         if self._alpha < 0: self._alpha = 0
         
         Datasets.log("err=" + str(self._err / self._miniBatchSize) + " penalty=" + str(penalty))

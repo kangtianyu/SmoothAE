@@ -7,6 +7,7 @@ Created on May 3, 2017
 import os
 import re
 import sys
+from six.moves import cPickle
 
 print(sys.argv)
 if len(sys.argv) > 1:
@@ -19,24 +20,26 @@ else:
     exit()
 
 cwd = os.getcwd()
-file_data = "UCEC"
+SIM_FILE = "sim002"
 
 folder_test = arg
-num = -1
+step = 10
 if not arg2 == "":
-    num = int(arg2)
+    step = int(arg2)
 
 groundTruth = []
-with open(cwd + "/../data/" + file_data + ".txt") as tfile:    
-    x = re.split("\s+",tfile.readline().strip())
-    del x[0]
-    labels = x
-    for line in tfile:        
-        x = re.split("\s+",line.strip())
-        groundTruth.append(int(x.pop(0)))
+with open(cwd + "/../data/" + SIM_FILE + ".txt") as tfile: 
+    W = cPickle.load(tfile)
+    L = cPickle.load(tfile)
+    W_SUM = cPickle.load(tfile)
+    samples = cPickle.load(tfile)
+    groundTruth = cPickle.load(tfile)
 
-i = 1
-filepath = cwd + "/../log/" + folder_test + "/w_" + str(i) + ".txt"
+i = 0
+filepath = cwd + "/../log/" + folder_test + "/w.txt"
+if not os.path.isfile(filepath):
+    i+=step
+    filepath = cwd + "/../log/" + folder_test + "/w_" + str(i) + ".txt"    
 while os.path.isfile(filepath):
     idx = []
     tr = 0
@@ -52,13 +55,9 @@ while os.path.isfile(filepath):
                tr +=1
             tot += 1
     print(str(i) + ":" + str(tr) + "/" + str(tot) + ":" + str(float(tr)/tot))
-    if num == i:        
-        for k in range(len(idx)):    
-            print(groundTruth[k],idx[k])
-        break
-    i += 1
+    i += step
     filepath = cwd + "/../log/" + folder_test + "/w_" + str(i) + ".txt"
 
-if num<0:
-    for k in range(len(idx)):    
-        print(groundTruth[k],idx[k])
+# if num<0:
+#     for k in range(len(idx)):    
+#         print(groundTruth[k],idx[k])
